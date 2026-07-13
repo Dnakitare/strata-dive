@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>STRATA // 深層降下</title>
+<style>
+  :root{
+    --ink:#e8f1ff;
+    --dim:#5a6a80;
+    --red:#ff3040;
+    --amber:#ffb020;
+    --blue:#4db8ff;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:#05060a;overflow:hidden}
+  body{
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    color:var(--ink);
+    -webkit-user-select:none;user-select:none;
+  }
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+  /* ---- CRT overlays ---- */
+  #scan{position:fixed;inset:0;pointer-events:none;z-index:40;
+    background:repeating-linear-gradient(to bottom, rgba(255,255,255,.025) 0 1px, transparent 1px 3px);
+    mix-blend-mode:overlay}
+  #vig{position:fixed;inset:0;pointer-events:none;z-index:41;
+    background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%)}
+  #crit{position:fixed;inset:0;pointer-events:none;z-index:41;opacity:0;
+    background:radial-gradient(ellipse at center, transparent 58%, rgba(255,48,64,.4) 100%)}
+  body.critical #crit{animation:critpulse 1.1s ease-in-out infinite}
+  @keyframes critpulse{0%,100%{opacity:.2}50%{opacity:.85}}
+  #flash{position:fixed;inset:0;pointer-events:none;z-index:42;opacity:0;background:#fff}
+  #flash.hit{background:var(--red)}
+  #flash.breach{background:#dff}
+
+  /* ---- HUD ---- */
+  .hud{position:fixed;z-index:30;pointer-events:none;letter-spacing:.08em}
+  .lbl{color:var(--dim);font-size:10px;letter-spacing:.25em}
+  .big{font-size:26px;font-weight:700}
+  #hudTL{top:22px;left:26px}
+  #hudTR{top:22px;right:26px;text-align:right}
+  #hudBL{bottom:22px;left:26px}
+  #hudBR{bottom:22px;right:26px;text-align:right}
+  #mult{color:var(--amber);font-size:14px;margin-top:2px}
+  #layerName{color:var(--dim);font-size:11px;margin-top:2px;letter-spacing:.2em}
+
+  .blocks{display:flex;gap:5px;margin-top:4px}
+  .blk{width:22px;height:10px;border:1px solid var(--ink);background:var(--ink)}
+  .blk.off{background:transparent;border-color:var(--dim)}
+  .blk.tach{border-color:var(--blue);background:var(--blue);width:14px;transform:skewX(-14deg)}
+  .blk.tach.off{background:transparent;border-color:var(--dim)}
+  #energyRow{margin-top:8px}
+  .cell{width:12px;height:12px;border:1px solid var(--amber);background:var(--amber);transform:rotate(45deg);margin:2px 6px 2px 2px;display:inline-block}
+  .cell.off{background:transparent;border-color:var(--dim)}
+
+  #btWrap{width:150px;height:8px;border:1px solid var(--dim);margin-top:4px;position:relative}
+  #btFill{position:absolute;left:0;top:0;bottom:0;width:0%;background:var(--blue);transition:width .12s linear}
+  body.btactive #btWrap{border-color:var(--blue);box-shadow:0 0 10px rgba(77,184,255,.6)}
+  #pwRow{margin-top:8px;display:flex;align-items:center;gap:8px}
+  .brk{width:11px;height:11px;border:1px solid var(--red);background:var(--red);transform:rotate(45deg);display:inline-block;margin-right:5px}
+  .brk.off{background:transparent;border-color:var(--dim)}
+  #flyTag{font-size:10px;color:#9ff2ff;letter-spacing:.2em;display:none;
+    animation:blink 1s steps(2) infinite;text-shadow:0 0 8px rgba(159,242,255,.6)}
+  body.flyline #flyTag{display:inline}
+  #bttint{position:fixed;inset:0;pointer-events:none;z-index:39;opacity:0;
+    background:radial-gradient(ellipse at center, rgba(77,184,255,.05) 40%, rgba(77,184,255,.16) 100%);
+    transition:opacity .25s}
+  body.bullettime #bttint{opacity:1}
+  body.bullettime #scan{background:repeating-linear-gradient(to bottom, rgba(120,200,255,.05) 0 1px, transparent 1px 3px)}
+  #traceWrap{width:190px;height:10px;border:1px solid var(--dim);margin-top:4px;margin-left:auto;position:relative}
+  #traceFill{position:absolute;right:0;top:0;bottom:0;left:100%;background:var(--red);transition:left .15s linear}
+  #tracePct{font-size:12px;color:var(--red)}
+  #traceTick{font-size:10px;color:var(--red);opacity:0;margin-left:6px;display:inline-block}
+  #traceTick.show{animation:feedup 1s ease-out forwards}
+  body.traced #traceWrap{border-color:var(--red);box-shadow:0 0 12px rgba(255,48,64,.7)}
+  body.traced #hudBR .lbl{color:var(--red)}
+
+  /* ---- center announcements ---- */
+  #announce{position:fixed;left:50%;top:34%;transform:translate(-50%,-50%);z-index:31;
+    text-align:center;pointer-events:none;opacity:0;transition:opacity .25s}
+  #announce .jp{font-size:13px;color:var(--dim);letter-spacing:.5em;margin-bottom:6px}
+  #announce .en{font-size:30px;font-weight:700;letter-spacing:.35em}
+  #announce.warn .en,#announce.warn .jp{color:var(--red)}
+  #announce.show{opacity:1}
+
+  /* ---- score feed ---- */
+  #feed{position:fixed;left:50%;bottom:24%;transform:translateX(-50%);z-index:31;
+    text-align:center;pointer-events:none;font-size:13px;letter-spacing:.15em}
+  #feed div{opacity:0;animation:feedup 1.1s ease-out forwards}
+  #feed .amber{color:var(--amber)} #feed .red{color:var(--red)} #feed .blue{color:var(--blue)}
+  @keyframes feedup{0%{opacity:0;transform:translateY(8px)}15%{opacity:1}70%{opacity:1}100%{opacity:0;transform:translateY(-10px)}}
+
+  /* ---- kodama chatter ---- */
+  #chatter{position:fixed;right:26px;top:38%;z-index:31;text-align:right;pointer-events:none;
+    font-size:11px;letter-spacing:.06em;line-height:1.9}
+  #chatter div{color:var(--blue);opacity:0;animation:chat 3.2s ease-out forwards;text-shadow:0 0 8px rgba(77,184,255,.4)}
+  @keyframes chat{0%{opacity:0;transform:translateX(10px)}8%{opacity:.95}75%{opacity:.95}100%{opacity:0}}
+  /* ---- FUDO, the defense's voice (opposite channel) ---- */
+  #ice{position:fixed;left:26px;top:38%;z-index:31;text-align:left;pointer-events:none;
+    font-size:11px;letter-spacing:.06em;line-height:1.9}
+  #ice div{color:var(--red);opacity:0;animation:icechat 4.2s ease-out forwards;text-shadow:0 0 8px rgba(255,48,64,.45)}
+  #ice div.gold{color:var(--amber);text-shadow:0 0 10px rgba(255,176,32,.55)}
+  @keyframes icechat{0%{opacity:0;transform:translateX(-10px)}8%{opacity:.95}80%{opacity:.95}100%{opacity:0}}
+
+  /* ---- title / gameover ---- */
+  .screen{position:fixed;inset:0;z-index:35;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;background:rgba(3,4,8,.45)}
+  .screen.hidden{display:none}
+  #title .jpbig{font-size:64px;color:rgba(232,241,255,.14);letter-spacing:.2em;font-weight:700;margin-bottom:-38px}
+  #title h1{font-size:52px;letter-spacing:.42em;font-weight:700;text-indent:.42em;
+    text-shadow:0 0 24px rgba(232,241,255,.35)}
+  #title .sub{margin-top:10px;font-size:12px;color:var(--dim);letter-spacing:.35em}
+  #title .tach{margin-top:6px;font-size:12px;color:var(--blue);letter-spacing:.25em}
+  .prompt{margin-top:46px;font-size:15px;letter-spacing:.35em;animation:blink 1.2s steps(2) infinite}
+  #title .goal{margin-top:8px;font-size:12px;color:var(--amber);letter-spacing:.3em;
+    text-shadow:0 0 10px rgba(255,176,32,.35)}
+  @keyframes blink{50%{opacity:.15}}
+  .controls{margin-top:18px;font-size:11px;color:var(--dim);letter-spacing:.2em;line-height:2}
+  #best{margin-top:26px;font-size:12px;color:var(--amber);letter-spacing:.2em}
+
+  #over h1{font-size:44px;letter-spacing:.3em;color:var(--red);text-indent:.3em;
+    text-shadow:0 0 30px rgba(255,48,64,.5)}
+  #win h1{font-size:44px;letter-spacing:.3em;color:var(--amber);text-indent:.3em;
+    text-shadow:0 0 34px rgba(255,176,32,.6)}
+  #win .jp{font-size:13px;color:var(--dim);letter-spacing:.5em;margin-top:8px}
+  #winStats{margin-top:30px;font-size:14px;line-height:2.2;letter-spacing:.2em}
+  #winStats b{color:var(--amber)}
+  #over .jp{font-size:13px;color:var(--dim);letter-spacing:.5em;margin-top:8px}
+  #overStats{margin-top:30px;font-size:14px;line-height:2.2;letter-spacing:.2em}
+  #overStats b{color:var(--amber)}
+
+  .pauseTitle{font-size:40px;letter-spacing:.4em;text-indent:.4em;font-weight:700;
+    text-shadow:0 0 24px rgba(232,241,255,.35)}
+  #pause .jp{font-size:12px;color:var(--dim);letter-spacing:.5em;margin-top:8px}
+  .pbtns{display:flex;gap:14px;margin-top:34px}
+  .pbtns button{background:rgba(5,6,10,.6);border:1px solid var(--dim);color:var(--ink);
+    font:inherit;font-size:13px;letter-spacing:.2em;padding:12px 22px;cursor:pointer}
+  .pbtns button:hover{border-color:var(--amber);color:var(--amber);
+    box-shadow:0 0 14px rgba(255,176,32,.25)}
+  .scoreLbl{margin-top:34px}
+  table.scores{margin-top:10px;border-collapse:collapse;font-size:12px;letter-spacing:.12em;min-width:460px}
+  table.scores th{color:var(--dim);font-weight:400;letter-spacing:.25em;font-size:10px;
+    padding:4px 18px;border-bottom:1px solid #1c2432;text-align:right}
+  table.scores td{padding:5px 18px;text-align:right;border-bottom:1px solid rgba(28,36,50,.5)}
+  table.scores th:first-child,table.scores td:first-child{text-align:left;color:var(--dim)}
+  table.scores tr.new td{color:var(--amber);text-shadow:0 0 10px rgba(255,176,32,.4)}
+  body.paused{cursor:auto}
+  #ctrlRows{display:flex;gap:26px;margin-top:10px;flex-wrap:wrap;justify-content:center}
+  .ctrlRow{display:flex;gap:10px;align-items:center;font-size:11px;color:var(--dim);letter-spacing:.2em}
+  .ctrlRow button{background:rgba(5,6,10,.6);border:1px solid var(--dim);color:var(--ink);
+    font:inherit;font-size:11px;letter-spacing:.15em;padding:6px 12px;cursor:pointer;min-width:72px}
+  .ctrlRow button:hover{border-color:var(--blue);color:var(--blue)}
+  .ctrlRow button.binding{border-color:var(--amber);color:var(--amber);animation:blink .6s steps(2) infinite}
+  body.freelook #hudTL,body.freelook #hudTR,body.freelook #hudBL,body.freelook #hudBR,
+  body.freelook #feed,body.freelook #chatter,body.freelook #announce{opacity:0}
+  body.freelook{cursor:grab}
+  #lookHint{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);color:var(--dim);
+    font-size:11px;letter-spacing:.25em;display:none;z-index:36}
+  body.freelook #lookHint{display:block}
+  #over .scores{margin-left:auto;margin-right:auto}
+  .glitch{animation:glitch .3s steps(2) 2}
+  @keyframes glitch{25%{transform:translate(-3px,1px) skewX(3deg)}75%{transform:translate(3px,-1px) skewX(-3deg)}}
+
+  .pbtns button.sel{border-color:var(--amber);color:var(--amber);
+    box-shadow:0 0 14px rgba(255,176,32,.25)}
+  .setRow{display:flex;gap:14px;align-items:center;margin-top:12px;font-size:12px;color:var(--dim)}
+  .setRow input[type=range]{width:280px;accent-color:#ffb020}
+  .setRow span{min-width:44px;text-align:left;color:var(--ink)}
+  #titleBtns{margin-top:20px}
+  #titleBtns button{font-size:11px;padding:9px 16px}
+
+  body.playing{cursor:none}
+  body.intro #hudTL,body.intro #hudTR,body.intro #hudBL,body.intro #hudBR{opacity:.06;transition:opacity .6s}
+  body.intro #feed,body.intro #chatter{opacity:0}
+  body.title #hudTL,body.title #hudTR,body.title #hudBL,body.title #hudBR{opacity:.14}
+</style>
+</head>
+<body class="title">
+<canvas id="c"></canvas>
+
+<div id="hudTL" class="hud">
+  <div class="lbl">SCORE // 得点</div>
+  <div id="score" class="big">0</div>
+  <div id="mult">×1.0 CHAIN</div>
+</div>
+
+<div id="hudTR" class="hud">
+  <div class="lbl">DEPTH // 潜行深度</div>
+  <div id="depth" class="big">0m</div>
+  <div id="layerName">SURFACE STRATUM</div>
+</div>
+
+<div id="hudBL" class="hud">
+  <div class="lbl">DIVE INTEGRITY // 生体維持</div>
+  <div class="blocks" id="integ"></div>
+  <div class="lbl" style="margin-top:10px">KODAMA // 随伴</div>
+  <div class="blocks" id="tachUI"></div>
+  <div id="energyRow"><span class="lbl">SPIKE&nbsp;</span><span id="energy"></span></div>
+  <div class="lbl" style="margin-top:10px">BULLET TIME // 弾丸時間 <span class="lbl" id="btKeyHint" style="letter-spacing:.1em">[SPACE / 右クリック]</span></div>
+  <div id="btWrap"><div id="btFill"></div></div>
+  <div id="pwRow">
+    <span class="lbl">BREAKER&nbsp;</span><span id="breakers"></span>
+    <span id="flyTag">FLYLINE // 航路表示</span>
+  </div>
+</div>
+
+<div id="hudBR" class="hud">
+  <div class="lbl">TRACE // 逆探知 <span id="tracePct">0%</span> <span id="traceTick"></span></div>
+  <div id="traceWrap"><div id="traceFill"></div></div>
+</div>
+
+<div id="announce"><div class="jp"></div><div class="en"></div></div>
+<div id="feed"></div>
+<div id="chatter"></div>
+<div id="ice"></div>
+
+<div id="title" class="screen">
+  <div class="jpbig">深層降下</div>
+  <h1>STRATA</h1>
+  <div class="sub">DEEP DIVE PROTOCOL // NET SKYDIVE</div>
+  <div class="goal">REACH THE CHORISTER'S SEAT // 深度4500m</div>
+  <div class="tach">KODAMA ESCORT ×2 // コダマ随伴</div>
+  <div class="prompt">CLICK TO DIVE</div>
+  <div class="pbtns" id="titleBtns">
+    <button id="btnTraining">TRAINING // 訓練</button>
+    <button id="btnSettings">SETTINGS // 設定</button>
+  </div>
+  <div class="controls">MOUSE — STEER // F — FIRE (HOLD FOR CHAIN GUNS)<br>SHIFT — TUCK (FAST + LOUD, GATE SCORE x1.5, NO GUNS)<br>SPACE / RIGHT-CLICK — BULLET TIME // ESC — PAUSE // M — MUTE<br>AMBER HOT LANES VENT TRACE // GRAZE FOR BONUS</div>
+  <div id="best"></div>
+</div>
+
+<div id="pause" class="screen hidden">
+  <h1 class="pauseTitle">PAUSED</h1>
+  <div class="jp">一時停止 // ダイブ中断中</div>
+  <div class="pbtns">
+    <button id="btnResume">RESUME // 再開</button>
+    <button id="btnRestart">RE-DIVE // 再降下</button>
+    <button id="btnLook">FREE LOOK // 観察</button>
+    <button id="btnSettingsP">SETTINGS // 設定</button>
+    <button id="btnAbort">ABORT // 中止</button>
+  </div>
+  <div class="lbl scoreLbl">CONTROLS // 操作設定 <span style="letter-spacing:.1em">(CLICK TO REBIND)</span></div>
+  <div id="ctrlRows"></div>
+  <div class="lbl scoreLbl">SCOREBOARD // 潜行記録</div>
+  <table class="scores" id="scores"></table>
+  <div class="controls">ESC / P — RESUME</div>
+</div>
+
+<div id="over" class="screen hidden">
+  <h1>SIGNAL LOST</h1>
+  <div class="jp">生体反応消失 // 対抗聖歌ニ接触</div>
+  <div id="overStats"></div>
+  <div class="lbl scoreLbl">SCOREBOARD // 潜行記録</div>
+  <table class="scores" id="scoresOver"></table>
+  <div class="prompt">CLICK TO RE-DIVE</div>
+</div>
+
+<div id="win" class="screen hidden">
+  <h1 id="winTitle">DIVE COMPLETE</h1>
+  <div class="jp">融合完了 // 人形使イト接続シタ</div>
+  <div id="winStats"></div>
+  <table class="scores" id="scoresWin"></table>
+  <div class="pbtns">
+    <button id="btnDeeper">DIVE DEEPER // 再降下</button>
+    <button id="btnEndRun">END RUN // 記録シテ終了</button>
+  </div>
+  <div class="controls">DIVE DEEPER — THE MERGED SCORE IS BANKED, THE REST RIDES // 未融合分ハ賭ケ<br>LAYERS REPLAY HARDER // 深層ハ更ニ苛烈</div>
+</div>
+
+<div id="settings" class="screen hidden">
+  <h1 class="pauseTitle">SETTINGS</h1>
+  <div class="jp">設定 // 環境調整</div>
+  <div class="lbl scoreLbl">DIFFICULTY CURVE // 難易度曲線</div>
+  <div class="pbtns" id="diffRow" style="margin-top:12px">
+    <button data-diff="calm">CALM // 平穏</button>
+    <button data-diff="standard">STANDARD // 標準</button>
+    <button data-diff="lethal">LETHAL // 致死</button>
+  </div>
+  <div class="lbl scoreLbl">GAME SOUND // 効果音</div>
+  <div class="setRow"><input id="sfxVol" type="range" min="0" max="100"><span id="sfxVolVal"></span></div>
+  <div class="lbl scoreLbl">AMBIENT DRONE // 環境音</div>
+  <div class="setRow"><input id="droneVol" type="range" min="0" max="100"><span id="droneVolVal"></span></div>
+  <div class="lbl scoreLbl">THEME SOUND // 音楽</div>
+  <div class="setRow"><input id="musVol" type="range" min="0" max="100"><span id="musVolVal"></span></div>
+  <div class="pbtns"><button id="btnSettingsBack">BACK // 戻る</button></div>
+</div>
+
+<div id="lookHint">DRAG — ORBIT // WHEEL — ZOOM // ESC — BACK</div>
+<div id="scan"></div><div id="vig"></div><div id="crit"></div><div id="bttint"></div><div id="flash"></div>
+<script type="importmap">
+{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/"}}
+</script>
+<script type="module" src="game.js"></script>
+</body>
+</html>
