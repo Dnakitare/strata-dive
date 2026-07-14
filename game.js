@@ -66,7 +66,8 @@ Object.assign(CHATTER, CHATTER_ADDITIONS);
 // ---------------- renderer / scene ----------------
 const canvas   = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// phones cap lower: the attract sim + bloom at dpr 3 melts mobile GPUs
+renderer.setPixelRatio(Math.min(devicePixelRatio, matchMedia('(pointer: coarse)').matches ? 1.5 : 2));
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(COL.bg);
@@ -1947,6 +1948,14 @@ function toTitle() {
 }
 
 // ---------------- input ----------------
+// touch-primary devices: the dive is tuned for mouse precision, so phones get
+// the attract sim as a living poster instead of a degraded port
+const TOUCH_ONLY = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
+if (TOUCH_ONLY) {
+  document.body.classList.add('touchview');
+  const p = document.querySelector('#title .prompt');
+  if (p) p.textContent = 'PLAY ON DESKTOP // デスクトップ専用';
+}
 addEventListener('mousemove', e => {
   if (G.freelook && orbit.dragging) {
     orbit.yaw -= (e.clientX - orbit.lx) * 0.008;
@@ -1968,6 +1977,7 @@ addEventListener('mousedown', e => {
     orbit.ly = e.clientY;
     return;
   }
+  if (TOUCH_ONLY) return; // poster mode: taps never start a dive
   if (e.button !== 0 || G.paused) return;
   if (e.target.closest('button, input, #settings')) return; // menu clicks never start a dive
   audioInit();

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <link rel="icon" href="data:,">
 <title>STRATA // 深層降下</title>
 <style>
@@ -14,7 +14,16 @@
     --blue:#4db8ff;
   }
   *{margin:0;padding:0;box-sizing:border-box}
-  html,body{height:100%;background:#05060a;overflow:hidden}
+  html,body{height:100%;background:#05060a;overflow:hidden;touch-action:none;overscroll-behavior:none}
+  /* touch-primary devices: the game is a desktop precision dive; the title
+     runs the attract sim as a living poster instead of a broken port */
+  body.touchview .prompt{animation:none;color:var(--amber)}
+  body.touchview #titleBtns,body.touchview .controls{display:none}
+  @media (max-width:720px){
+    #title h1{font-size:12vw}
+    .jpbig{font-size:9vw}
+    .controls,.sub,.goal,.tach{font-size:10px}
+  }
   body{
     font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
     color:var(--ink);
