@@ -691,6 +691,47 @@ const mandala = new THREE.Group();
   scene.add(mandala);
 }
 
+// ---------------- the seat arrival: the goal made visible ----------------
+// while the chorister closes, the seat itself rises out of the deep (mandala +
+// core disc lerp toward the camera, fog opens, gold motes stream upward), and
+// the merge is a held fall INTO it rather than a banner
+const seatFx = { k: 0, cine: 0, DUR: 3.0, ring: 0, payload: null, m0: 0, d0: 0, s0: 1, moteGrp: null };
+{
+  const grp = new THREE.Group();
+  for (let i = 0; i < 36; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: 0xffc860, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    s.userData.ownMat = true;
+    const a = Math.random() * 6.283;
+    s.position.set(Math.cos(a) * (2 + Math.random() * 6), Math.sin(a) * (2 + Math.random() * 6),
+      -30 - Math.random() * 130);
+    s.scale.setScalar(0.2 + Math.random() * 0.5);
+    s.userData.vz = 6 + Math.random() * 14;
+    s.userData.op = 0.08 + Math.random() * 0.16;
+    grp.add(s);
+  }
+  grp.visible = false;
+  scene.add(grp);
+  seatFx.moteGrp = grp;
+}
+function resetSeat() {
+  seatFx.k = 0;
+  seatFx.cine = 0;
+  seatFx.ring = 0;
+  mandala.position.z = -370;
+  mandala.scale.setScalar(1);
+  const disc = world.userData.coreDisc;
+  if (disc) {
+    disc.position.z = -385;
+    disc.scale.setScalar(1);
+    disc.material.opacity = 0.75;
+  }
+  bloom.strength = 0.85;
+  seatFx.moteGrp.visible = false;
+}
+
 // lattice data nodes drifting outside the shaft
 const nodes = [];
 {
@@ -1439,13 +1480,37 @@ function merge() {
   iceLine(MERGE_LINES[tier][0], true, '聖歌手');
   chat('merge');
   sfx.evaded();
-  flash('breach', 0.55, 900);
-  G.slowmo = 1.2;
-  shockwave(player.x, player.y, COL.amber, 12);
-  burst(new THREE.Vector3(player.x, player.y, -4), COL.amber, 90, 14);
-  disposeGroup(P.group);
-  G.chor = null;
-  if (G.auto) { G.chorRedive = 1.6; return; } // attract mode just re-dives
+  if (G.auto) { // attract mode: no ceremony, just re-dive
+    flash('breach', 0.55, 900);
+    shockwave(player.x, player.y, COL.amber, 12);
+    burst(new THREE.Vector3(player.x, player.y, -4), COL.amber, 90, 14);
+    disposeGroup(P.group);
+    G.chor = null;
+    resetSeat();
+    G.chorRedive = 1.6;
+    return;
+  }
+  // players get the arrival: she spirals into you while the seat rushes up to
+  // swallow the screen; finishMerge() fires the white-out and the win screen
+  seatFx.cine = 0.0001;
+  seatFx.ring = 0;
+  seatFx.payload = { bonus, tier, aliveT };
+  seatFx.m0 = mandala.position.z;
+  const disc = world.userData.coreDisc;
+  seatFx.d0 = disc ? disc.position.z : -385;
+  seatFx.s0 = disc ? disc.scale.x : 1;
+  G.trigger = false;
+  G.tuck = false;
+}
+function finishMerge() {
+  const { bonus, tier, aliveT } = seatFx.payload;
+  if (G.chor) { disposeGroup(G.chor.group); G.chor = null; }
+  flash('breach', 0.9, 1200);
+  sfx.layer();
+  G.slowmo = 0.9;
+  shockwave(0, 0, COL.amber, 14);
+  burst(new THREE.Vector3(0, 0, -4), COL.amber, 90, 14);
+  resetSeat();
   G.mode = 'won';
   G.trigger = false;
   G.tuck = false;
@@ -1467,7 +1532,7 @@ function merge() {
     $('win').classList.remove('hidden');
     document.body.className = 'won';
     playTrack('title', true);
-  }, 1400);
+  }, 900);
 }
 function diveDeeper() {
   const score = G.score, loop = G.loop, hits = G.hits, training = G.training, banked = G.banked;
@@ -1784,7 +1849,7 @@ function addScore(base, label, cls) {
   if (label) feed(`+${pts} ${label}`, cls);
 }
 function damage(srcPos, cause = 'SYSTEM SHOCK // 障害') {
-  if (G.invuln > 0 || G.mode !== 'playing') return;
+  if (G.invuln > 0 || G.mode !== 'playing' || seatFx.cine > 0) return;
   // a living kodama intercepts the hit
   const saver = kodamas.find(t => t.alive);
   if (saver) return kodamaSave(saver, srcPos);
@@ -1878,6 +1943,7 @@ function resetRun(auto, introLen = INTRO_LEN) {
   for (const b2 of beams) disposeGroup(b2.line);
   beams.length = 0;
   if (G.chor) { disposeGroup(G.chor.group); G.chor = null; }
+  resetSeat();
   $('win').classList.add('hidden');
   for (const b of bursts) disposeGroup(b.points);
   bursts.length = 0;
@@ -1985,6 +2051,7 @@ addEventListener('mousedown', e => {
   AU.ctx && AU.ctx.resume();
   applyVolumes();
   if (!$('settings').classList.contains('hidden')) return;
+  if (seatFx.cine > 0 && seatFx.cine < seatFx.DUR - 0.05) { seatFx.cine = seatFx.DUR - 0.02; return; }
   if (!ui.title.classList.contains('hidden')) return resetRun(false);
   if (G.mode === 'dead') { if (G.deadT > 1.0) toTitleOrRestart(); return; } // after the 0.9s reveal
   // any input during the intro skips to the dive
@@ -2509,7 +2576,7 @@ function step(dt) {
   G.blackK = THREE.MathUtils.clamp(
     (G.blackK || 0) + ((G.layer % 9 === 6 && G.mode === 'playing') ? dt * 1.2 : -dt * 1.2), 0, 1);
   scene.fog.near = 70 - 32 * G.blackK;
-  scene.fog.far = 400 - 235 * G.blackK;
+  scene.fog.far = 400 - 235 * G.blackK + 320 * seatFx.k; // the deep opens at the seat
   playerLight.intensity = 10 + 9 * G.blackK;
   playerLight.distance = 14 + 8 * G.blackK;
   // bullet time: the world slows, the diver does not — but time dilation
@@ -3069,6 +3136,61 @@ function step(dt) {
     P.halo.scale.setScalar(6.4 + Math.sin(G.time * 1.7) * 0.8);
     if (g.position.z > -12 &&
         Math.hypot(g.position.x - player.x, g.position.y - player.y) < 3.2) merge();
+  }
+  // ---- the seat rises to meet her: the goal visibly arrives ----
+  if (G.chor && !seatFx.cine && G.mode === 'playing') seatFx.k = Math.min(1, seatFx.k + sdt / 8);
+  if (seatFx.k > 0 && !seatFx.cine) {
+    const e = seatFx.k * seatFx.k * (3 - 2 * seatFx.k);
+    mandala.position.z = -370 + 245 * e;
+    const disc = world.userData.coreDisc;
+    if (disc) {
+      disc.position.z = -385 + 232 * e;
+      disc.scale.setScalar(1 + 1.8 * e);
+      disc.material.opacity = 0.75 + 0.25 * e;
+    }
+  }
+  if (seatFx.k > 0) { // gold motes stream up out of the deep
+    seatFx.moteGrp.visible = true;
+    for (const m of seatFx.moteGrp.children) {
+      m.position.z += m.userData.vz * sdt;
+      if (m.position.z > -6) m.position.z = -160;
+      m.material.opacity = m.userData.op * seatFx.k * (seatFx.cine ? 2 : 1);
+    }
+  }
+  // ---- merge cinematic: falling into the light together ----
+  if (seatFx.cine > 0 && G.mode === 'playing') {
+    seatFx.cine += sdt;
+    const t = seatFx.cine, k = Math.min(1, t / seatFx.DUR);
+    const rush = k * k;
+    player.tx = player.ty = 0; // hands off: the dive finishes itself
+    const P = G.chor;
+    if (P) { // she spirals into you, halo blooming
+      const ang = 2.4 * t + 1.1 * t * t;
+      const rad = 1.5 * (1 - k) + 0.12;
+      P.group.position.x = player.x + Math.cos(ang) * rad;
+      P.group.position.y = player.y + Math.sin(ang) * rad * 0.6;
+      P.group.position.z = -6 + 2 * k;
+      P.halo.material.opacity = 0.4 + 0.5 * k;
+      P.halo.scale.setScalar(6.4 + 11 * rush);
+    }
+    // the seat rushes up past the camera: the additive core disc becomes the
+    // white-out with no overlay needed until the final flash
+    mandala.position.z = seatFx.m0 + (10 - seatFx.m0) * rush;
+    mandala.scale.setScalar(1 + 0.6 * rush);
+    const disc = world.userData.coreDisc;
+    if (disc) {
+      disc.position.z = seatFx.d0 + (6 - seatFx.d0) * rush;
+      disc.scale.setScalar(seatFx.s0 + 2.4 * rush);
+      disc.material.opacity = 1;
+    }
+    bloom.strength = 0.85 + 1.6 * rush;
+    G.fovKick = Math.max(G.fovKick, k * 1.4);
+    if (seatFx.ring <= t) { // cascading ring pulses, tightening as she closes
+      seatFx.ring = t + 0.45 - 0.25 * k;
+      shockwave(player.x, player.y, COL.amber, 5 + 9 * k);
+      if (k > 0.5) burst(new THREE.Vector3(player.x, player.y, -5), COL.amber, 22, 9);
+    }
+    if (t >= seatFx.DUR) finishMerge();
   }
   if (G.chorRedive > 0) { // attract mode merged: quietly restart the loop
     G.chorRedive -= dt;
